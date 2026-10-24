@@ -3,52 +3,59 @@ using UnityEngine;
 
 public class HealthSystem : MonoBehaviour, IDamageable
 {
-    public event Action<float, float> onLifeChanged; // current health, max health
-    public event Action onDie;
-    public event Action OnDamaged;
+    public event Action<float, float> OnHealthChanged; // current health, max health
+    public event Action<float> OnDamaged;              // On being damaged  
+    public event Action<float> OnHealed;               // on being healed
+    public event Action OnDied;
 
-    [SerializeField] private float maxHealth = 100f;
+    [SerializeField, Min(1f)] private float maxHealth = 100f;
+    [SerializeField] private bool startInvulnerable;
     private float currentHealth;
 
-    public bool isInvulnerable = false;
     public float CurrentHealth => currentHealth;
     public float MaxHealth => maxHealth;
+    public float Normalized => currentHealth / maxHealth;
+    public bool IsDead => currentHealth <= 0f;
+    public bool IsInvulnerable { get; set; }
 
     private void Awake()
     {
         currentHealth = maxHealth;
+        IsInvulnerable = startInvulnerable;
     }
-    private void Start()
-    {
-        onLifeChanged?.Invoke(currentHealth, maxHealth);
-    }
+    private void Start() => NotifyHealthChanged();
     public void TakeDamage(float damage)
     {
-        if (damage < 0 || isInvulnerable) return;
-        if (currentHealth <= 0) return;
+        if (damage <= 0f || IsInvulnerable || IsDead) return;
 
-        currentHealth -= damage;
+        currentHealth = Mathf.Max(currentHealth - damage, 0f);
 
-        if (currentHealth <= 0)
-        {
-            currentHealth = 0;
-            onDie?.Invoke();
-        }
-        else
-        {
-            OnDamaged?.Invoke();
-            onLifeChanged?.Invoke(currentHealth, maxHealth);
-        }
+        OnDamaged?.Invoke(damage);
+        NotifyHealthChanged();
+
+        if (IsDead) OnDied?.Invoke();
     }
     public void Heal(float amount)
     {
-        if (amount <= 0 || currentHealth >= maxHealth) return;
+        if (amount <= 0f || IsDead || currentHealth >= maxHealth) return;
+
+        float previous = currentHealth;
         currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
-        onLifeChanged?.Invoke(currentHealth, maxHealth);
+
+        OnHealed?.Invoke(currentHealth - previous);
+        NotifyHealthChanged();
+    }
+    public void SetMaxHealth(float value, bool refill = false)
+    {
+        maxHealth = Mathf.Max(1f, value);
+        currentHealth = refill ? maxHealth : Mathf.Min(currentHealth, maxHealth);
+        NotifyHealthChanged();
     }
     public void ResetHealth()
     {
         currentHealth = maxHealth;
-        onLifeChanged?.Invoke(currentHealth, maxHealth);
+        NotifyHealthChanged();
     }
+
+    private void NotifyHealthChanged() => OnHealthChanged?.Invoke(currentHealth, maxHealth);
 }
